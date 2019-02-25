@@ -11,7 +11,9 @@ knitr::opts_chunk$set(echo = TRUE)
 <center> <h1>Career Attrition Analysis for DDS Talent Management</h1> </center>
 <center> <h1>NaturalIntelligence Analytics</h1> </center>
 
-##Set up our environment and load the data
+NaturalIntelligence Analytics would like to thank DDS Talent Management for the opportunity to explore job attrition data! The codebook below is intended to load, clean, and explore the data supplied to us for the purpose of discovering the top 3 factors that lead to attrition. Let's get started!
+
+##Let's up our environment and load the data!
 ```{r 1}
 library(randomForest)
 library(RCurl)
@@ -20,44 +22,69 @@ library(nnet)
 library(kableExtra)
 jobURL <- getURL("https://raw.githubusercontent.com/mjwolfe91/DDS_401_TeamNI_Case_Study2/master/Data/CaseStudy2-data.csv")
 jobDF <- read.csv(text=jobURL, header=TRUE)
+#kable(jobDF, format = "html", align = "c") %>% kable_styling(bootstrap_options = c("striped", "hover"))
 ```
-##Stratify some of the variables
+
+##Hmmm, looks like there's a little cleanup to do...let's stratify some of the variables
 ```{r 2}
 str(jobDF)
-jobDF$AgeGroup <- cut(jobDF$X.U.FEFF.Age, c(-Inf, 18, 24, 34, 44, 54, 64, Inf))
-levels(jobDF$AgeGroup) <- c("<18", "18-24", "25-34", "35-44", "45-54", "55-64", "65+")
+jobDF$AgeGroup <- cut(jobDF$X.U.FEFF.Age, c(-Inf, 20, 29, 39, 49, 59, Inf))
+levels(jobDF$AgeGroup) <- c("<20", "20-29", "30-39", "40-49", "50-59", "60+")
+#jobDF$AttritionInd <- 0
+#jobDF[jobDF$Attrition == "Yes", ]$AttritionInd <- 1
+jobDF$GenderInd <- 0
+jobDF[jobDF$Gender == "Male", ]$GenderInd <- 1
+drops <- c("X.U.FEFF.Age","Gender")
+jobDF <- jobDF[ , !(names(jobDF) %in% drops)]
 ```
 ##Not sure where to begin...so let's test them all!
+Since we are looking for the top 3 variables out of several possibilities, we will use a machine learning technique known as a random forest. A random forest is a panel of decision trees designed to test several permutations of variable interactions to see which variables seem to have the most influence on a particular outcome. This makes it a powerful technique in exploration.
 ```{r 3}
 set.seed(71)
-jobs.rf <- randomForest(Attrition ~ ., data=jobDF, importance=TRUE, proximity=TRUE)
+jobs.rf <- randomForest(Attrition ~ ., data=jobDF, importance=TRUE)
 print(jobs.rf)
 ```
-##Now that it's done, let's see which ones are most important
+
+##Now that it's done, let's see which factors contribute most to attrition
 ```{r 4}
-rf.dataframe <- data.frame(round(importance(jobs.rf),2))
-kable(rf.dataframe, format = "html", align = "c") %>% kable_styling(bootstrap_options = c("striped", "hover"))
+importanceDF <- data.frame(round(importance(jobs.rf),2))
+sortYes <- importanceDF[order(importanceDF$Yes,decreasing = TRUE),]
+sortNo <- importanceDF[order(importanceDF$No,decreasing = TRUE),]
+kable(sortYes, format = "html", align = "c") %>% kable_styling(bootstrap_options = c("striped", "hover"))
+kable(sortNo, format = "html", align = "c") %>% kable_styling(bootstrap_options = c("striped", "hover"))
 ```
-##Do MDS - 1 on proximity
+According to our random forest analysis, the top 3 factors that contribute to attrition are Overtime, Monthly Income, and Stock Option Level. Let's take a deeper dive though, to really confirm.
+##Let's take a look at a more detailed breakdown
 ```{r 5}
-jobs.mds <- cmdscale(1 - jobs.rf$proximity, eig=TRUE)
-op <- par(pty="s")
-pairs(cbind(jobDF[,1:4], jobs.mds$points), cex=0.6, gap=0,
-      col=c("red", "green", "blue")[as.numeric(jobDF$Attrition)],
-      main="Job Attrition Data Predictors and MDS of Proximity Based on RandomForest")
-par(op)
-print(jobs.mds$GOF)
+explain_forest(jobs.rf, data=jobDF)
 ```
 ##Let's plot importance for each variable
 ```{r 6}
-varImpPlot(jobs.rf)
-importanceOrder <- order(-jobs.rf$importance)
-names <- rownames(jobs.rf$importance)
-for (name in names)
-    partialPlot(jobs.rf, jobDF, eval(name), main=name, xlab=name)
+varImpPlot(jobs.rf, main="Importance of Job Variables in Attrition")
 ```
+It seems clear that the 3 factors we highlighted earlier are our best bet, according to this algorithm. Let's test!
+
 ##Now that we have the top 3, let's test the model!
+Since this is a model with a binary response (someone will attrite or they will not), we will test a logistic regression model. It's important to recognize that this model predicts if the included variables will have an impact (either way) on the attrition outcome, not that they are entirely predictive of positive attrition.
 ```{r 7}
-job.lm <- multinom(relevel(jobDF$Attrition, ref="Yes") ~ HourlyRate + StockOptionLevel + JobRole, data=jobDF)
-summary(job.lm)
+jobs.glm <- glm(Attrition ~ MonthlyIncome + StockOptionLevel + OverTime, data=jobDF, family=binomial(link='logit'))
+summary(jobs.glm)
+pR2(jobs.glm)
 ```
+In a linear regression model, the adjusted R-Squared is the most broadly accepted statistic for "accuracy." In logistic regression, the closest equivalent is the McFadden log likelihood. In this case, the model with the above parameters produces 12.4% McFadden score - indicating that this model contributes to roughly 12.4% of the variance in attrition outcomes.
+
+##Other observations
+Our random forest algorithm has also postulated the top factors that contribution to a person remaining in their job. Let's go through a similar exercise:
+```{r 8}
+sortNo <- importanceDF[order(importanceDF$No,decreasing = TRUE),]
+kable(sortNo, format = "html", align = "c") %>% kable_styling(bootstrap_options = c("striped", "hover"))
+```
+It looks like some of the same factors that lead to attrition can also contribute to someone remaining in their current role. Let's adjust the model for a "No" response assumption:
+```{r 9}
+jobsNo.glm <- glm(Attrition ~ MonthlyIncome + JobRole + OverTime, data=jobDF, family=binomial(link='logit'))
+summary(jobs.glm)
+pR2(jobs.glm)
+```
+This produces an identical McFadden score.
+##Conclusion
+While on the surface, it appears the variables we selected using the random forest do not have that large of an impact, this does not mean they are not accurate. There are almost 20 possible variables and many different permutations therein, meaning true "accuracy" cannot be measured without training and testing the model. The next steps would be to obtain more data.

@@ -1,6 +1,7 @@
 #load packages and data
 #install.packages("randomForest")
 library(randomForest)
+library(randomForestExplainer)
 library(RCurl)
 library(ggplot2)
 
@@ -20,14 +21,9 @@ print(jobs.rf)
 #check variable importance
 round(importance(jobs.rf),2)
 
+
 #do MDS on 1 - proximity:
-jobs.mds <- cmdscale(1 - jobs.rf$proximity, eig=TRUE)
-op <- par(pty="s")
-pairs(cbind(jobDF[,1:4], jobs.mds$points), cex=0.6, gap=0,
-      col=c("red", "green", "blue")[as.numeric(jobDF$Attrition)],
-      main="Job Attrition Data Predictors and MDS of Proximity Based on RandomForest")
-par(op)
-print(jobs.mds$GOF)
+explain_forest(jobs.rf, data=jobDF)
 
 #test regression on proximity
 str(jobs.rf$importance)
@@ -40,5 +36,11 @@ for (name in names)
     partialPlot(jobs.rf, jobDF, eval(name), main=name, xlab=name)
 
 #multinom logistic model based on top 3 most important "yes" features
-job.lm <- multinom(relevel(jobDF$Attrition, ref="Yes") ~ HourlyRate + StockOptionLevel + JobRole, data=jobDF)
-summary(job.lm)
+jobs.glm <- glm(Attrition ~ MonthlyIncome + StockOptionLevel + OverTime, data=jobDF, family=binomial(link='logit'))
+summary(jobs.glm)
+
+fitted.results <- predict(jobs.glm,newdata=subset(test,select=c(2,3,4,5,6,7,8)),type='response')
+fitted.results <- ifelse(fitted.results > 0.5,1,0)
+
+misClasificError <- mean(fitted.results != test$Survived)
+print(paste('Accuracy',1-misClasificError))
