@@ -16,13 +16,15 @@ NaturalIntelligence Analytics would like to thank DDS Talent Management for the 
 ##Let's up our environment and load the data!
 ```{r 1}
 library(randomForest)
+library(randomForestExplainer)
+library(pscl)
 library(RCurl)
 library(ggplot2)
 library(nnet)
 library(kableExtra)
 jobURL <- getURL("https://raw.githubusercontent.com/mjwolfe91/DDS_401_TeamNI_Case_Study2/master/Data/CaseStudy2-data.csv")
 jobDF <- read.csv(text=jobURL, header=TRUE)
-#kable(jobDF, format = "html", align = "c") %>% kable_styling(bootstrap_options = c("striped", "hover"))
+kable(jobDF, format = "html", align = "c") %>% kable_styling(bootstrap_options = c("striped", "hover"))
 ```
 
 ##Hmmm, looks like there's a little cleanup to do...let's stratify some of the variables
@@ -30,58 +32,78 @@ jobDF <- read.csv(text=jobURL, header=TRUE)
 str(jobDF)
 jobDF$AgeGroup <- cut(jobDF$X.U.FEFF.Age, c(-Inf, 20, 29, 39, 49, 59, Inf))
 levels(jobDF$AgeGroup) <- c("<20", "20-29", "30-39", "40-49", "50-59", "60+")
-#jobDF$AttritionInd <- 0
-#jobDF[jobDF$Attrition == "Yes", ]$AttritionInd <- 1
 jobDF$GenderInd <- 0
 jobDF[jobDF$Gender == "Male", ]$GenderInd <- 1
 drops <- c("X.U.FEFF.Age","Gender")
 jobDF <- jobDF[ , !(names(jobDF) %in% drops)]
 ```
 ##Not sure where to begin...so let's test them all!
-Since we are looking for the top 3 variables out of several possibilities, we will use a machine learning technique known as a random forest. A random forest is a panel of decision trees designed to test several permutations of variable interactions to see which variables seem to have the most influence on a particular outcome. This makes it a powerful technique in exploration.
+Since we are looking for the top 3 variables out of several possibilities, we will use a machine learning technique known as a random forest. A random forest is a panel of decision trees designed to test several permutations of variable interactions to see which variables seem to have the most influence on a particular outcome. This makes it a powerful technique in exploration. The first step is to build a training set & test set. The training set is 70% of the data, while the test set is 30%.
 ```{r 3}
-set.seed(71)
-jobs.rf <- randomForest(Attrition ~ ., data=jobDF, importance=TRUE)
+set.seed(26)
+train <- sample(nrow(jobDF),0.7*nrow(jobDF), replace = FALSE)
+jobDF.train <- jobDF[train,]
+jobDF.test <- jobDF[-train,]
+jobs.rf <- randomForest(Attrition ~ ., data=jobDF.train, importance=TRUE)
 print(jobs.rf)
 ```
-
-##Now that it's done, let's see which factors contribute most to attrition
+##Using a loop function to identify the optimal mtry
 ```{r 4}
-importanceDF <- data.frame(round(importance(jobs.rf),2))
-sortYes <- importanceDF[order(importanceDF$Yes,decreasing = TRUE),]
-sortNo <- importanceDF[order(importanceDF$No,decreasing = TRUE),]
-kable(sortYes, format = "html", align = "c") %>% kable_styling(bootstrap_options = c("striped", "hover"))
-kable(sortNo, format = "html", align = "c") %>% kable_styling(bootstrap_options = c("striped", "hover"))
+a=c()
+i=5
+for (i in 3:34) {
+  jobs.rf2<-randomForest(Attrition ~.,data = jobDF.train, ntree=500, mtry=i, importance=TRUE)
+  pred_test_jobs<-predict(jobs.rf2,jobDF.test,type ="class")
+  a[i-2]=mean(pred_test_jobs==jobDF.test$Attrition)
+}
+plot(3:34,a,pch=19,col="steel blue",type = "o",xlab = "mtry itteration", ylab = "Accuracy %",main = "Model optimization")
 ```
-According to our random forest analysis, the top 3 factors that contribute to attrition are Overtime, Monthly Income, and Stock Option Level. Let's take a deeper dive though, to really confirm.
-##Let's take a look at a more detailed breakdown
+##Looks like 24 mtry's generates the most accurate model.
 ```{r 5}
-explain_forest(jobs.rf, data=jobDF)
+jobs.rf3 <- randomForest(Attrition ~ ., data=jobDF.train, ntree=500, importance=TRUE, mtry=24)
+print(jobs.rf3)
+```
+##Let's predict!
+```{r 6}
+jobRFPred <-predict(jobs.rf3,jobDF.test,type = "class")
+mean(pred_test_jobs==jobDF.test$Attrition)
+table(pred_test_jobs,jobDF.test$Attrition)
+```
+##Prediction test supports the accuracy we found earlier. Let's use this to pick our top 3 variables.
+```{r 7}
+importanceDF <- data.frame(round(importance(jobs.rf3),2))
+sortYes <- importanceDF[order(importanceDF$Yes,decreasing = TRUE),]
+kable(sortYes, format = "html", align = "c") %>% kable_styling(bootstrap_options = c("striped", "hover"))
+```
+According to our random forest analysis, the top 3 factors that contribute to attrition are Overtime, Monthly Income, and Environment Satisfaction. Let's take a deeper dive though, to really confirm.
+##Let's take a look at a more detailed breakdown
+```{r 8}
+#explain_forest(jobs.rf3, data=jobDF)
 ```
 ##Let's plot importance for each variable
-```{r 6}
-varImpPlot(jobs.rf, main="Importance of Job Variables in Attrition")
+```{r 9}
+varImpPlot(jobs.rf3, main="Importance of Job Variables in Attrition")
 ```
 It seems clear that the 3 factors we highlighted earlier are our best bet, according to this algorithm. Let's test!
 
 ##Now that we have the top 3, let's test the model!
 Since this is a model with a binary response (someone will attrite or they will not), we will test a logistic regression model. It's important to recognize that this model predicts if the included variables will have an impact (either way) on the attrition outcome, not that they are entirely predictive of positive attrition.
-```{r 7}
-jobs.glm <- glm(Attrition ~ MonthlyIncome + StockOptionLevel + OverTime, data=jobDF, family=binomial(link='logit'))
+```{r 10}
+jobs.glm <- glm(Attrition ~ MonthlyIncome + EnvironmentSatisfaction + OverTime, data=jobDF, family=binomial(link='logit'))
 summary(jobs.glm)
 pR2(jobs.glm)
 ```
-In a linear regression model, the adjusted R-Squared is the most broadly accepted statistic for "accuracy." In logistic regression, the closest equivalent is the McFadden log likelihood. In this case, the model with the above parameters produces 12.4% McFadden score - indicating that this model contributes to roughly 12.4% of the variance in attrition outcomes.
+In a linear regression model, the adjusted R-Squared is the most broadly accepted statistic for "accuracy." In logistic regression, the closest equivalent is the McFadden log likelihood. In this case, the model with the above parameters produces 11.9% McFadden score - indicating that this model contributes to roughly 11.9% of the variance in attrition outcomes.
 
 ##Other observations
 Our random forest algorithm has also postulated the top factors that contribution to a person remaining in their job. Let's go through a similar exercise:
-```{r 8}
+```{r 11}
 sortNo <- importanceDF[order(importanceDF$No,decreasing = TRUE),]
 kable(sortNo, format = "html", align = "c") %>% kable_styling(bootstrap_options = c("striped", "hover"))
 ```
 It looks like some of the same factors that lead to attrition can also contribute to someone remaining in their current role. Let's adjust the model for a "No" response assumption:
-```{r 9}
-jobsNo.glm <- glm(Attrition ~ MonthlyIncome + JobRole + OverTime, data=jobDF, family=binomial(link='logit'))
+```{r 12}
+jobsNo.glm <- glm(Attrition ~ MonthlyIncome + TotalWorkingYears + OverTime, data=jobDF, family=binomial(link='logit'))
 summary(jobs.glm)
 pR2(jobs.glm)
 ```
