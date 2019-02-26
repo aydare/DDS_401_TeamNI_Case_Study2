@@ -1,0 +1,104 @@
+---
+title: "Random Forest Classification"
+author: "Ayoade Dare"
+date: "February 25, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(randomForest)
+library(ggplot2)
+library(RCurl)
+library(nnet)
+cs_url <- getURL("https://raw.githubusercontent.com/mjwolfe91/DDS_401_TeamNI_Case_Study2/master/Data/CaseStudy2-data.csv")
+csDf <- read.csv(text=cs_url, header=TRUE)
+str(csDf)
+csDf$AgeGroup <- cut(csDf$X.U.FEFF.Age, c(-Inf, 18, 24, 34, 44, 54, 64, Inf))
+levels(csDf$AgeGroup) <- c("<18", "18-24", "25-34", "35-44", "45-54", "55-64", "65+")
+
+
+```
+
+```{r}
+str(csDf)
+head(csDf)
+summary(csDf)
+```
+Build a training set & test set: The training set is 70% of the data, while the test set is 30%
+```{r}
+set.seed(26)
+train<-sample(nrow(csDf),0.7*nrow(csDf), replace = FALSE)
+trainset_csdf<-csDf[train,]
+testset_csdf<-csDf[-train,]
+
+
+```
+View the training set
+```{r}
+#summary(trainset_csdf)
+dim(trainset_csdf)
+head(trainset_csdf)
+```
+View  Test set
+```{r}
+dim(testset_csdf)
+head(testset_csdf)
+```
+Random forest
+```{r}
+cs.rf<- randomForest(Attrition ~., data = trainset_csdf,importance=TRUE)
+cs.rf
+```
+
+Fine tunning the Random Forest model
+```{r}
+cs.rf2<-randomForest(Attrition ~.,data = trainset_csdf,ntree=500,importance=TRUE,mtry=10)
+cs.rf2
+```
+Predict on the training set
+```{r}
+pred_rf2<-predict(cs.rf2,trainset_csdf,type = "class")
+table(pred_rf2,trainset_csdf$Attrition)
+```
+
+predicting on test set
+```{r}
+pred_test_cs.df<-predict(cs.rf2,testset_csdf,type = "class")
+mean(pred_test_cs.df==testset_csdf$Attrition)
+table(pred_test_cs.df,testset_csdf$Attrition)
+```
+To check the important variables
+```{r}
+round(importance(cs.rf2),2)
+varImpPlot(cs.rf,main = "Variables by Importance",pch=19,col="blue")
+var_imp<- order(-cs.rf$importance)
+names<-rownames(cs.rf$importance)
+for(name in names)
+  partialPlot(cs.rf,csDf, eval(name),main = name,xlab = name)
+```
+Using a loop function to identify the optimal mtry
+```{r}
+a=c()
+i=5
+for (i in 3:34) {
+  cs.rf3<-randomForest(Attrition ~.,data = trainset_csdf, ntree=500, mtry=i, importance=TRUE)
+  pred_test_cs.df3<-predict(cs.rf3,testset_csdf,type ="class")
+  a[i-2]=mean(pred_test_cs.df3==testset_csdf$Attrition)
+}
+a
+
+```
+Plotting the accuracy 
+```{r}
+plot(3:34,a,pch=19,col="steel blue",type = "o",xlab = "mtry itteration", ylab = "Accuracy %",main = "Model optimization")
+```
+
+```{r}
+
+```
+
+
