@@ -2,7 +2,10 @@
 title: "DDS_401_TeamNI_Case_Study_2"
 author: "Michael J Wolfe & Ayoade Dare"
 date: "February 23, 2019"
-output: html_document
+output:
+  word_document: default
+  html_document: default
+always_allow_html: yes
 ---
 
 ```{r setup, include=FALSE}
@@ -99,7 +102,7 @@ According to our random forest analysis, the top 3 factors that contribute to at
 ##Let's plot importance for each variable
 
 ```{r 9}
-varImpPlot(jobs.rf3, main="Importance of Job Variables in Attrition")
+varImpPlot(jobs.rf3, main="Importance of Job Variables in Attrition", n.var=15)
 ```
 
 It seems clear that the 3 factors we highlighted earlier are our best bet, according to this algorithm. Let's test!
