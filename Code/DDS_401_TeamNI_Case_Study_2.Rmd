@@ -3,8 +3,8 @@ title: "DDS_401_TeamNI_Case_Study_2"
 author: "Michael J Wolfe & Ayoade Dare"
 date: "February 23, 2019"
 output:
-  word_document: default
   html_document: default
+  word_document: default
 always_allow_html: yes
 ---
 
@@ -18,7 +18,7 @@ NaturalIntelligence Analytics would like to thank DDS Talent Management for the 
 
 ##Let's set up our environment and load the data!
 
-```{r 1}
+```{r env}
 suppressMessages(library(randomForest))
 suppressMessages(library(randomForestExplainer))
 suppressMessages(library(pscl))
@@ -30,11 +30,12 @@ suppressMessages(library(broom))
 jobURL <- getURL("https://raw.githubusercontent.com/mjwolfe91/DDS_401_TeamNI_Case_Study2/master/Data/CaseStudy2-data.csv")
 jobDF <- read.csv(text=jobURL, header=TRUE)
 kable(head(jobDF), format = "html", align = "c") %>% kable_styling(bootstrap_options = c("striped", "hover"))
+#kable(head(jobDF), align = "c") %>% kable_styling(bootstrap_options = c("striped", "hover"))
 ```
 
 ##Hmmm, looks like there's a little cleanup to do...let's stratify some of the variables
 
-```{r 2}
+```{r data}
 str(jobDF)
 jobDF$AgeGroup <- cut(jobDF$X.U.FEFF.Age, c(-Inf, 20, 29, 39, 49, 59, Inf))
 levels(jobDF$AgeGroup) <- c("<20", "20-29", "30-39", "40-49", "50-59", "60+")
@@ -43,11 +44,26 @@ jobDF[jobDF$Gender == "Male", ]$GenderInd <- 1
 drops <- c("X.U.FEFF.Age","Gender")
 jobDF <- jobDF[ , !(names(jobDF) %in% drops)]
 ```
+
+##Let's do some exploratory data analysis
+
+```{r eda}
+jobDF.eda <- jobDF
+jobDF.eda$AttritionInd <- 0
+jobDF.eda[jobDF.eda$Attrition == "Yes", ]$AttritionInd <- 1
+JSsum <- aggregate(jobDF.eda$AttritionInd, by=list(Category=jobDF.eda$JobSatisfaction), FUN=sum)
+ggplot(JSsum, aes(y=x, x=Category)) + geom_bar(position="dodge", stat="identity", fill=c("steelblue")) + scale_x_continuous(name="Job Satisfaction Level") + scale_y_continuous(name="Number of Attritions", limits=c(0, 80)) + coord_flip()
+RelSum <- aggregate(jobDF.eda$AttritionInd, by=list(Category=jobDF.eda$RelationshipSatisfaction), FUN=sum)
+ggplot(RelSum, aes(y=x, x=Category)) + geom_bar(position="dodge", stat="identity", fill=c("forestgreen")) + scale_x_continuous(name="Relationship Satisfaction Level") + scale_y_continuous(name="Number of Attritions", limits=c(0, 80)) + coord_flip()
+RoleSum <- aggregate(jobDF.eda$AttritionInd, by=list(JobRole=jobDF.eda$JobRole), FUN=sum)
+ggplot(RoleSum, aes(y=x, x=JobRole)) + geom_bar(position="dodge", stat="identity", fill=c("orange")) + scale_y_continuous(name="Number of Attritions", limits=c(0, 80)) + coord_flip()
+```
+
 ##Not sure where to begin...so let's test them all!
 
 Since we are looking for the top 3 variables out of several possibilities, we will use a machine learning technique known as a random forest. A random forest is a panel of decision trees designed to test several permutations of variable interactions to see which variables seem to have the most influence on a particular outcome. This makes it a powerful technique in exploration. The first step is to build a training set & test set. The training set is 70% of the data, while the test set is 30%.
 
-```{r 3}
+```{r rf}
 set.seed(26)
 train <- sample(nrow(jobDF),0.7*nrow(jobDF), replace = FALSE)
 jobDF.train <- jobDF[train,]
@@ -55,9 +71,10 @@ jobDF.test <- jobDF[-train,]
 jobs.rf <- randomForest(Attrition ~ ., data=jobDF.train, importance=TRUE)
 print(jobs.rf)
 ```
+
 ##Identify the optimal mtry
 
-```{r 4}
+```{r optimize}
 a=c()
 i=5
 for (i in 3:34) {
@@ -70,38 +87,40 @@ plot(3:34,a,pch=19,col="steel blue",type = "o",xlab = "mtry itteration", ylab = 
 
 ##Looks like 24 mtry's generates the most accurate model
 
-```{r 5}
+```{r finalize}
 jobs.rf3 <- randomForest(Attrition ~ ., data=jobDF.train, ntree=500, importance=TRUE, mtry=24)
 print(jobs.rf3)
 ```
 
 ##Let's predict!
 
-```{r 6}
+```{r predict}
 jobRFPred <-predict(jobs.rf3,jobDF.test,type = "class")
 mean(pred_test_jobs==jobDF.test$Attrition)
 kable(table(pred_test_jobs,jobDF.test$Attrition), format = "html", align = "c") %>% kable_styling(bootstrap_options = c("striped", "hover"))
+#kable(table(pred_test_jobs,jobDF.test$Attrition), align = "c") %>% kable_styling(bootstrap_options = c("striped", "hover"))
 ```
 
 ##Prediction test supports the accuracy we found earlier. Let's use this to pick our top 3 variables.
 
-```{r 7}
+```{r pick vars}
 importanceDF <- data.frame(round(importance(jobs.rf3),2))
 sortYes <- importanceDF[order(importanceDF$Yes,decreasing = TRUE),]
 kable(sortYes, format = "html", align = "c") %>% kable_styling(bootstrap_options = c("striped", "hover"))
+#kable(sortYes, align = "c") %>% kable_styling(bootstrap_options = c("striped", "hover"))
 ```
 
 According to our random forest analysis, the top 3 factors that contribute to attrition are Overtime, Monthly Income, and Environment Satisfaction, with ~84% accuracy.
 
 ##Let's take a look at a more detailed breakdown
 
-```{r 8}
+```{r report}
 #explain_forest(jobs.rf3, data=jobDF)
 ```
 
 ##Let's plot importance for each variable
 
-```{r 9}
+```{r plot vars}
 varImpPlot(jobs.rf3, main="Importance of Job Variables in Attrition", n.var=15)
 ```
 
@@ -111,10 +130,12 @@ It seems clear that the 3 factors we highlighted earlier are our best bet, accor
 
 Since this is a model with a binary response (someone will attrite or they will not), we will test a logistic regression model. It's important to recognize that this model predicts if the included variables will have an impact (either way) on the attrition outcome, not that they are entirely predictive of positive attrition.
 
-```{r 10}
+```{r glm}
 jobs.glm <- glm(Attrition ~ MonthlyIncome + EnvironmentSatisfaction + OverTime, data=jobDF, family=binomial(link='logit'))
 kable(tidy(jobs.glm), format = "html", align = "c") %>% kable_styling(bootstrap_options = c("striped", "hover"))
 kable(pR2(jobs.glm), format = "html", align = "c") %>% kable_styling(bootstrap_options = c("striped", "hover"))
+#kable(tidy(jobs.glm), align = "c") %>% kable_styling(bootstrap_options = c("striped", "hover"))
+#kable(pR2(jobs.glm), align = "c") %>% kable_styling(bootstrap_options = c("striped", "hover"))
 ```
 
 In a linear regression model, the adjusted R-Squared is the most broadly accepted statistic for "accuracy." In logistic regression, the closest equivalent is the McFadden log likelihood. In this case, the model with the above parameters produces 11.9% McFadden score - indicating that this model contributes to roughly 11.9% of the variance in attrition outcomes.
@@ -123,17 +144,20 @@ In a linear regression model, the adjusted R-Squared is the most broadly accepte
 
 Our random forest algorithm has also postulated the top factors that contribution to a person remaining in their job. Let's go through a similar exercise:
 
-```{r 11}
+```{r check no}
 sortNo <- importanceDF[order(importanceDF$No,decreasing = TRUE),]
 kable(sortNo, format = "html", align = "c") %>% kable_styling(bootstrap_options = c("striped", "hover"))
+#kable(sortNo, align = "c") %>% kable_styling(bootstrap_options = c("striped", "hover"))
 ```
 
 It looks like some of the same factors that lead to attrition can also contribute to someone remaining in their current role. Let's adjust the model for a "No" response assumption:
 
-```{r 12}
+```{r glm2}
 jobsNo.glm <- glm(Attrition ~ MonthlyIncome + TotalWorkingYears + OverTime, data=jobDF, family=binomial(link='logit'))
 kable(tidy(jobsNo.glm), format = "html", align = "c") %>% kable_styling(bootstrap_options = c("striped", "hover"))
 kable(pR2(jobsNo.glm), format = "html", align = "c") %>% kable_styling(bootstrap_options = c("striped", "hover"))
+#kable(tidy(jobsNo.glm), align = "c") %>% kable_styling(bootstrap_options = c("striped", "hover"))
+#kable(pR2(jobsNo.glm), align = "c") %>% kable_styling(bootstrap_options = c("striped", "hover"))
 ```
 
 This produces a McFadden score of 10.8%.
