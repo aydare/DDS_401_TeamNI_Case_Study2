@@ -173,4 +173,4 @@ This produces a McFadden score of 10.8%.
 
 ##Conclusion
 
-While on the surface, it appears the variables we selected using the random forest do not have that large of an impact, this does not mean they are not accurate. There are almost 20 possible variables and many different permutations therein, meaning true "accuracy" cannot be measured without training and testing the model. The next steps would be to obtain more data.
+While on the surface, it appears the variables we selected using the random forest do not have that large of an impact, this does not mean they are not accurate. There are almost 20 possible variables and many different permutations therein, meaning true "accuracy" cannot be measured without training and testing the model. The next steps would be to obtain more data to properly train and test our model, so that we can more accurately predict if and when an individual will quit their job.
