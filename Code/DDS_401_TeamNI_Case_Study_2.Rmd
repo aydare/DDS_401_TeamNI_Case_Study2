@@ -58,6 +58,15 @@ ggplot(RelSum, aes(y=x, x=Category)) + geom_bar(position="dodge", stat="identity
 RoleSum <- aggregate(jobDF.eda$AttritionInd, by=list(JobRole=jobDF.eda$JobRole), FUN=sum)
 ggplot(RoleSum, aes(y=x, x=JobRole)) + geom_bar(position="dodge", stat="identity", fill=c("orange")) + scale_y_continuous(name="Number of Attritions", limits=c(0, 80)) + coord_flip()
 ```
+EDA: Exploring the data distribution 
+```{r message=FALSE, warning=FALSE}
+CSDf<-jobDF[which(jobDF$Attrition=="Yes"),]
+ggplot(CSDf,aes(EnvironmentSatisfaction))+scale_fill_brewer(palette="Spectral")+geom_histogram(aes(fill=JobRole))
+ggplot(CSDf,aes(JobRole,JobSatisfaction))+geom_boxplot(varwidth = T,fill="red")+ labs(title = "Job Satisfaction By Role")
+ggplot(CSDf,aes(JobRole,RelationshipSatisfaction))+geom_boxplot(varwidth = T,fill="plum") +labs(title = "Relationship Satisfaction By Role")
+ggplot(CSDf,aes(JobRole,EnvironmentSatisfaction))+geom_boxplot(varwidth = T,fill="blue")+ labs(title = "Environment Satisfaction By Job Role")
+ ggplot(CSDf,aes(JobSatisfaction))+scale_fill_brewer(palette = "Spectral")+geom_histogram(aes(fill=JobRole))
+```
 
 ##Not sure where to begin...so let's test them all!
 
