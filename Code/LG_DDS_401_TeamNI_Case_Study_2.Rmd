@@ -1,0 +1,39 @@
+---
+title: "Logistic Regression of HR Data"
+author: "Ayoade Dare"
+date: "February 26, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+Load the required packages and dataset
+```{r}
+library(randomForest)
+library(ggplot2)
+library(RCurl)
+library(nnet)
+jobURL <- getURL("https://raw.githubusercontent.com/mjwolfe91/DDS_401_TeamNI_Case_Study2/master/Data/CaseStudy2-data.csv")
+jobDF <- read.csv(text=jobURL, header=TRUE)
+str(jobDF)
+jobDF$AgeGroup <- cut(jobDF$X.U.FEFF.Age, c(-Inf, 18, 24, 34, 44, 54, 64, Inf))
+levels(jobDF$AgeGroup) <- c("<18", "18-24", "25-34", "35-44", "45-54", "55-64", "65+")
+```
+
+Properties of the dataset
+```{r}
+str(jobDF)
+head(jobDF)
+summary(jobDF)
+```
+
+ Build a training set and test set
+```{r}
+set.seed(26)
+train<-sample(nrow(jobDF),0.7*nrow(jobDF), replace = FALSE)
+TrainingSet<-jobDF[train,]
+TestSet<-jobDF[-train,]
+```
+ 
+View the training set 
