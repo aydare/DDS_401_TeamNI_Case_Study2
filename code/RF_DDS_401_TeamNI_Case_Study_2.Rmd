@@ -14,80 +14,80 @@ library(randomForest)
 library(ggplot2)
 library(RCurl)
 library(nnet)
-cs_url <- getURL("https://raw.githubusercontent.com/mjwolfe91/DDS_401_TeamNI_Case_Study2/master/Data/CaseStudy2-data.csv")
-csDf <- read.csv(text=cs_url, header=TRUE)
-str(csDf)
-csDf$AgeGroup <- cut(csDf$X.U.FEFF.Age, c(-Inf, 18, 24, 34, 44, 54, 64, Inf))
-levels(csDf$AgeGroup) <- c("<18", "18-24", "25-34", "35-44", "45-54", "55-64", "65+")
+jobURL <- getURL("https://raw.githubusercontent.com/mjwolfe91/DDS_401_TeamNI_Case_Study2/master/Data/CaseStudy2-data.csv")
+jobDF <- read.csv(text=jobURL, header=TRUE)
+str(jobDF)
+jobDF$AgeGroup <- cut(jobDF$X.U.FEFF.Age, c(-Inf, 18, 24, 34, 44, 54, 64, Inf))
+levels(jobDF$AgeGroup) <- c("<18", "18-24", "25-34", "35-44", "45-54", "55-64", "65+")
 
 
 ```
 
 ```{r}
-str(csDf)
-head(csDf)
-summary(csDf)
+str(jobDF)
+head(jobDF)
+summary(jobDF)
 ```
 Build a training set & test set: The training set is 70% of the data, while the test set is 30%
 ```{r}
 set.seed(26)
-train<-sample(nrow(csDf),0.7*nrow(csDf), replace = FALSE)
-trainset_csdf<-csDf[train,]
-testset_csdf<-csDf[-train,]
+train<-sample(nrow(jobDF),0.7*nrow(jobDF), replace = FALSE)
+TrainingSet<-jobDF[train,]
+TestSet<-jobDF[-train,]
 
 
 ```
 View the training set
 ```{r}
-#summary(trainset_csdf)
-dim(trainset_csdf)
-head(trainset_csdf)
+#summary(TrainingSet)
+dim(TrainingSet)
+head(TrainingSet)
 ```
 View  Test set
 ```{r}
-dim(testset_csdf)
-head(testset_csdf)
+dim(TestSet)
+head(TestSet)
 ```
 Random forest
 ```{r}
-cs.rf<- randomForest(Attrition ~., data = trainset_csdf,importance=TRUE)
-cs.rf
+jobs.rf<- randomForest(Attrition ~., data = TrainingSet,importance=TRUE)
+jobs.rf
 ```
 
 Fine tunning the Random Forest model
 ```{r}
-cs.rf2<-randomForest(Attrition ~.,data = trainset_csdf,ntree=500,importance=TRUE,mtry=10)
-cs.rf2
+jobs.rf2<-randomForest(Attrition ~.,data = TrainingSet,ntree=500,importance=TRUE,mtry=10)
+jobs.rf2
 ```
 Predict on the training set
 ```{r}
-pred_rf2<-predict(cs.rf2,trainset_csdf,type = "class")
-table(pred_rf2,trainset_csdf$Attrition)
+pred_rf2<-predict(jobs.rf2,TrainingSet,type = "class")
+table(pred_rf2,TrainingSet$Attrition)
 ```
 
 predicting on test set
 ```{r}
-pred_test_cs.df<-predict(cs.rf2,testset_csdf,type = "class")
-mean(pred_test_cs.df==testset_csdf$Attrition)
-table(pred_test_cs.df,testset_csdf$Attrition)
+pred_test_cs.df<-predict(jobs.rf2,TestSet,type = "class")
+mean(pred_test_cs.df==TestSet$Attrition)
+table(pred_test_cs.df,TestSet$Attrition)
 ```
 To check the important variables
 ```{r}
-round(importance(cs.rf2),2)
-varImpPlot(cs.rf,main = "Variables by Importance",pch=19,col="blue")
-var_imp<- order(-cs.rf$importance)
-names<-rownames(cs.rf$importance)
+round(importance(jobs.rf2),2)
+varImpPlot(jobs.rf,main = "Variables by Importance",pch=19,col="blue")
+var_imp<- order(-jobs.rf$importance)
+names<-rownames(jobs.rf$importance)
 for(name in names)
-  partialPlot(cs.rf,csDf, eval(name),main = name,xlab = name)
+  partialPlot(jobs.rf,jobDF, eval(name),main = name,xlab = name)
 ```
 Using a loop function to identify the optimal mtry
 ```{r}
 a=c()
 i=5
 for (i in 3:34) {
-  cs.rf3<-randomForest(Attrition ~.,data = trainset_csdf, ntree=500, mtry=i, importance=TRUE)
-  pred_test_cs.df3<-predict(cs.rf3,testset_csdf,type ="class")
-  a[i-2]=mean(pred_test_cs.df3==testset_csdf$Attrition)
+  jobs.rf3<-randomForest(Attrition ~.,data = TrainingSet, ntree=500, mtry=i, importance=TRUE)
+  pred_test_cs.df3<-predict(jobs.rf3,TestSet,type ="class")
+  a[i-2]=mean(pred_test_cs.df3==TestSet$Attrition)
 }
 a
 
